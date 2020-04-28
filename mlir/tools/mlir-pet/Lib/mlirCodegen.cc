@@ -149,6 +149,24 @@ Value MLIRCodegen::createLoad(__isl_take pet_expr *expr) {
          "expect pet_expr_access type");
 
   auto location = builder_.getUnknownLoc();
+  // is const ->  no id? //TODO: havent found any cases with non-int in the index expr
+  auto id = isl::manage(pet_expr_access_get_id(expr));
+  if (!id) {
+    int cst;
+    auto muaff = (isl::manage(pet_expr_access_get_index(expr)));
+    auto umap = isl::union_map::from(muaff);
+    auto maps = isl::map::from_union_map(umap);
+    isl::pw_aff pwaff = muaff.get_pw_aff(0);
+    pwaff.foreach_piece([&](isl::set s, isl::aff a) -> isl_stat {
+      auto val = isl::manage(isl_aff_get_constant_val(a.get()));
+      auto str = isl_val_to_str(val.get());
+      cst = std::stoi(str);
+      free(str);
+      return isl_stat_ok;
+    });
+    pet_expr_free(expr);
+    return createConstantIntOp(cst, location);
+  }
   if (!isMultiDimensionalArray(expr)) {
     Value scalar;
     if (failed(getSymbol(expr, scalar))) {
